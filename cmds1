@@ -1,0 +1,230 @@
+==================================
+yum install jenkins=8080
+==================================
+  yum update -y
+     init 0
+      hostnamectl set-hostname jenkins
+      exec bash
+      hostname
+      yum update -y
+      yum install wget vim git java-17-openjdk-devel make tar -y
+      java -version
+	cd /opt
+	wget https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.89/bin/apache-tomcat-9.0.89.tar.gz
+     wget https://dlcdn.apache.org/maven/maven-3/3.9.7/binaries/apache-maven-3.9.7-bin.tar.gz
+	wget https://get.jenkins.io/war-stable/2.452.1/jenkins.war
+        tar -xvf apache-maven-3.9.7-bin.tar.gz
+    tar -xvf apache-tomcat-9.0.89.tar.gz
+	mv apache-maven-3.9.7 maven
+	mv apache-tomcat-9.0.89 tomcat
+	firewall-cmd --permanent --add-port=8080/tcp
+     firewall-cmd --reload
+     /opt/tomcat/bin/startup.sh
+     vim /opt/tomcat/webapps/manager/META-INF/context.xml
+vim /opt/tomcat/conf/tomcat-users.xml
+    ll /opt/tomcat/webapps
+    cp jenkins.war /opt/tomcat/webapps
+     vim ~/.bashrc
+
+export PATH=$PATH:/usr/lib/jvm/java-17-openjdk-17.0.11.0.9-2.el9.x86_64/bin
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-17.0.11.0.9-2.el9.x86_64
+															
+
+export PATH=$PATH:/opt/maven/bin
+export M2_HOME=/opt/maven
+
+
+export PATH=$PATH:/usr/bin/git 
+     source ~/.bashrc
+
+---nexus to connect 
+vim /opt/maven/conf/settings.xml
+-------------
+cd /root/.jenkins
+ ssh-keygen
+ ll /root/.ssh
+cat /root/.ssh/id_rsa
+cd /root/.jenkins/workspace
+ ll /root/.ssh
+ssh-copy-id -i ~/.ssh/id_rsa.pub ipaddress
+
+
+
+==================================
+tomcat method installations==8080
+=============================
+
+     yum update -y
+	hostnamectl set-hostname tomcatser
+exec bash
+hostname 
+	
+      yum install vim wget tar git fontconfig java-17-openjdk-devel -y
+      java -version
+      cd /opt
+      ll
+     wget https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.89/bin/apache-tomcat-9.0.89.tar.gz
+     ll
+     tar -xvf apache-tomcat-9.0.89.tar.gz
+     ll
+     mv apache-tomcat-9.0.89 tomcat
+     ll
+     vim /opt/tomcat/webapps/manager/META-INF/context.xml
+     vim /opt/tomcat/conf/tomcat-users.xml
+<role rolename="manager-gui"/>
+<user username="tomcat" password="s3cret" roles="manager-gui"/>
+
+     firewall-cmd --permanent --add-port=8080/tcp
+     firewall-cmd --reload
+     /opt/tomcat/bin/startup.sh 
+========================================================
+SonarQube==9000
+================================================
+hostnamectl set-hostname sonarqube
+exec bash
+hostname 
+
+sudo yum install vim wget curl unzip fontconfig java-17-openjdk-devel -y
+
+sudo setenforce 0
+sudo sed -i 's/^SELINUX-enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+sudo tee -a /etc/sysctl.conf<<EOF
+vm.max_map_count=262144
+fs.file-max=65536
+EOF
+sudo sysctl --system
+
+
+# Create a user for sonar
+
+sudo useradd sonar 
+sudo passwd sonar       Pavan@123
+
+#Install and configure PostgreSQL
+
+yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+
+sudo yum -y install postgresql16-server postgresql16
+
+sudo /usr/pgsql-16/bin/postgresql-16-setup initdb
+
+sudo systemctl enable --now postgresql-16
+
+sudo vim /var/lib/pgsql/16/data/pg_hba.conf    // need not change anything in this file
+
+vim /var/lib/pgsql/16/data/postgresql.conf    // uncoment line number 60 and replace as  listen_addresses = '*'
+systemctl restart postgresql-16
+su - postgres
+psql
+
+alter user postgres with password 'Pavan@123';
+\q
+createdb sonarqube
+psql
+CREATE USER sonarqube WITH PASSWORD 'Pavan@123';
+GRANT ALL PRIVILEGES ON DATABASE sonarqube to sonarqube;
+\q
+
+exit
+sudo wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-9.9.5.90363.zip
+sudo wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-9.4.0.54424.zip
+
+unzip sonarqube-9.4.0.54424.zip
+
+mv sonarqube-*/ /opt/sonarqube
+
+
+
+sudo vim /opt/sonarqube/conf/sonar.properties      //copy the below lines from 66 to 83 and paste at 407th line
+
+-------------------------------------
+## Database details
+sonar.jdbc.username=sonarqube
+sonar.jdbc.password=CloudGen@123
+sonar.jdbc.url-jdbc:postgresql://localhost/sonarqube
+
+
+##How you will access SonarQube web UI
+sonar.web.host=0.0.0.0
+sonar.web.post=9000
+
+##Java options
+
+sonar.web.javaOpts=-server -Xms512m -Xmx512m -XX:+HeapDumpOnOutOfMemoryError
+sonar.search.javaOpts=-Xmx512m -Xms512m -XX:MaxDirectMemorySize=256m -XX:+HeapDumpOnOutOfMemoryError
+
+##Also add the following Elasticsearch storage paths 
+sonar.path.data=/var/sonarqube/data 
+sonar.path.temp=/var/sonarqube/temp
+----------------
+
+
+chown -R sonar:sonar /opt/sonarqube
+mkdir -p /var/sonarqube
+chown -R sonar:sonar /var/sonarqube
+
+
+vim /etc/systemd/system/sonarqube.service
+
+---------------------------------------------
+[Unit]
+Description=SonarQube service
+After=syslog.target network.target
+
+[Service]
+Type=forking
+ExecStart=/opt/sonarqube/bin/linux-x86-64/sonar.sh start
+ExecStop=/opt/sonarqube/bin/linux-x86-64/sonar.sh stop
+LimitNOFILE=65536
+LimitNPROC=4096
+User=sonar
+Group=sonar
+Restart=on-failue
+
+[Install]
+
+WantedBy=multi-user.target
+
+----------------------------------------------------
+
+sudo systemctl daemon-reload
+sudo systemctl start sonarqube.service
+sudo systemctl enable sonarqube.service
+systemctl status sonarqube.service
+
+
+#Firewall rules to allow SonarQube Access
+
+sudo systemctl status firewalld 
+sudo systemctl start firewalld
+sudo systemctl status firewalld
+sudo firewall-cmd --permanent --add-port=9000/tcp && sudo firewall-cmd --reload
+
+======================================================
+Nexus Server =8081
+===========================================
+ 	 hostnamectl set-hostname nexusser
+      exec bash
+      hostname
+      yum install wget vim unzip -y
+      sudo  yum install tar make unzip wget vim -y
+      cd /opt/
+      yum install fontconfig java-11-openjdk-devel -y
+	yum install chkconfig -y
+     wget https://download.sonatype.com/nexus/3/nexus-3.69.0-02-java11-unix.tar.gz
+     tar -xvf nexus-3.69.0-02-java11-unix.tar.gz
+     mv nexus-3.69.0-02 nexus
+     sudo useradd nexus
+     sudo chown -R nexus:nexus /opt/nexus
+     sudo chown -R nexus:nexus /opt/sonatype-work/
+     sudo vim /opt/nexus/bin/nexus.rc
+     sudo ln -s /opt/nexus/bin/nexus /etc/rc.d/init.d/nexus
+     sudo yum install chkconfig -y
+     sudo chkconfig --add nexus
+     sudo chkconfig --levels 35 nexus on
+     sudo service nexus start
+     sudo service nexus status
+     firewall-cmd --permanent --add-port=8081/tcp
+    firewall-cmd --reload
+
